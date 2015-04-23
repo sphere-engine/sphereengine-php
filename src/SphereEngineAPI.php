@@ -38,10 +38,16 @@ class SphereEngineAPI
     private $timeout = array(
             'test' => 5,
             'languages' => 5,
+            // judges
             'judges' => 5,
             'getJudge' => 5,
+            'removeJudge' => 5,
+            'addJudge' => 5,
+            'modifyJudge' => 5,
+            // submissions
             'getSubmission' => 5,
             'sendSubmission' => 10,
+            // problems
             'getProblem' => 5
         );
 
@@ -144,7 +150,70 @@ class SphereEngineAPI
             return $this->get_content($url, 'GET', $data);
         } else
             return 'Error: action available only for Sphere Problem service';
-    }    
+    }
+
+    /**
+     * Remove judge
+     * @return success info or error
+     */ 
+    public function removeJudge($id)
+    {
+        if ($this->type == 'SP') {
+            $data['method'] = 'removeJudge';
+            $url = $this->baseurl . 'judges/' . $id . '?access_token=' . $this->access_token;
+            return $this->get_content($url, 'DELETE', $data);
+        } else
+            return 'Error: action available only for Sphere Problem service';
+    }
+
+    /**
+     * Add judge
+     *
+     * @param  string   $name           judge name
+     * @param  string   $source         judge source code
+     * @param  integer  $language       source code language (default if not provided)
+     *
+     * @return success info or error
+     */ 
+    public function addJudge($name, $source, $language=NULL)
+    {
+        if ($this->type == 'SP') {
+            $data = array(
+                'name' => $name,
+                'sourceCode' => $source,
+                'languageId' => (isset($language) ? $language : $this->default_language_id),
+                );
+            $data['method'] = 'addJudge';
+            $url = $this->baseurl . 'judges?access_token=' . $this->access_token;
+            return $this->get_content($url, 'POST', $data);
+        } else
+            return 'Error: action available only for Sphere Problem service';
+    }
+
+    /**
+     * Modify judge
+     *
+     * @param  integer  $id             judge id
+     * @param  string   $name           judge name
+     * @param  string   $source         judge source code
+     * @param  integer  $language       source code language (default if not provided)
+     *
+     * @return success info or error
+     */ 
+    public function modifyJudge($id, $name, $source, $language=NULL)
+    {
+        if ($this->type == 'SP') {
+            $data = array(
+                'name' => $name,
+                'sourceCode' => $source,
+                'languageId' => (isset($language) ? $language : $this->default_language_id),
+                );
+            $data['method'] = 'modifyJudge';
+            $url = $this->baseurl . 'judges/' . $id . '?access_token=' . $this->access_token;
+            return $this->get_content($url, 'PUT', $data);
+        } else
+            return 'Error: action available only for Sphere Problem service';
+    }
 
     /**
      * Get submission by ID
@@ -246,9 +315,9 @@ class SphereEngineAPI
         if ($type == 'GET') {
             $options = array(
                 'http' => array(
-                'method' => 'GET',
-                'timeout' => $this->getTimeout($method),
-                'ignore_errors' => true
+                    'method' => 'GET',
+                    'timeout' => $this->getTimeout($method),
+                    'ignore_errors' => true
                 )
             );
             $context  = stream_context_create($options);
@@ -261,6 +330,35 @@ class SphereEngineAPI
                 'http' => array( // even if https
                     'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
                     'method'  => 'POST',
+                    'timeout' => $this->getTimeout($method),
+                    'ignore_errors' => true,
+                    'content' => http_build_query($data),
+                ),
+            );
+            $context  = stream_context_create($options);
+            if (($content = @file_get_contents($url, false, $context)) === FALSE) {
+                return 'timeout';
+            } else
+                return json_decode($content, true);
+        } else if ($type == 'DELETE') {
+            $options = array(
+                'http' => array( // even if https
+                    'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                    'method'  => 'DELETE',
+                    'timeout' => $this->getTimeout($method),
+                    'ignore_errors' => true,
+                ),
+            );
+            $context  = stream_context_create($options);
+            if (($content = @file_get_contents($url, false, $context)) === FALSE) {
+                return 'timeout';
+            } else
+                return json_decode($content, true);
+        } else if ($type == 'PUT') {
+            $options = array(
+                'http' => array( // even if https
+                    'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                    'method'  => 'PUT',
                     'timeout' => $this->getTimeout($method),
                     'ignore_errors' => true,
                     'content' => http_build_query($data),
