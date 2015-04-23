@@ -38,6 +38,8 @@ class SphereEngineAPI
     private $timeout = array(
             'test' => 5,
             'languages' => 5,
+            'judges' => 5,
+            'getJudge' => 5,
             'getSubmission' => 5,
             'sendSubmission' => 10,
             'getProblem' => 5
@@ -117,6 +119,34 @@ class SphereEngineAPI
     }
 
     /**
+     * Get available judges
+     * @return list of judges or error
+     */ 
+    public function judges()
+    {
+        if ($this->type == 'SP') {
+            $data['method'] = 'judges';
+            $url = $this->baseurl . 'judges?access_token=' . $this->access_token;
+            return $this->get_content($url, 'GET', $data);
+        } else
+            return 'Error: action available only for Sphere Problem service';
+    }
+
+    /**
+     * Get judge by id
+     * @return judge info or error
+     */ 
+    public function getJudge($id)
+    {
+        if ($this->type == 'SP') {
+            $data['method'] = 'getJudge';
+            $url = $this->baseurl . 'judges/' . $id . '?access_token=' . $this->access_token;
+            return $this->get_content($url, 'GET', $data);
+        } else
+            return 'Error: action available only for Sphere Problem service';
+    }    
+
+    /**
      * Get submission by ID
      *
      * @param  integer  $id         id of the submission
@@ -156,9 +186,9 @@ class SphereEngineAPI
      *                                  'language' => integer,
      *                                  'input' => string,
      *                              SphereProblems: 
-     *                                  'problemCode' => string,
-     *                                  'language' => integer,
-     *                                  'source' => string,
+     *                                  'problemCode' => string, (required)
+     *                                  'language' => integer, (required)
+     *                                  'source' => string, (required)
      *                                  'contestCode' => string,
      *                                  'userId' => integer,
      *                                  'private' => bool,
@@ -212,7 +242,7 @@ class SphereEngineAPI
     {
         // get proper timeout by calling method
         $method = (isset($data['method'])) ? $data['method'] : 'test';
-        
+
         if ($type == 'GET') {
             $options = array(
                 'http' => array(
