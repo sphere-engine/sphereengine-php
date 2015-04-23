@@ -212,7 +212,7 @@ class SphereEngineAPI
     {
         // get proper timeout by calling method
         $method = (isset($data['method'])) ? $data['method'] : 'test';
-        echo $this->getTimeout($method);
+        
         if ($type == 'GET') {
             $options = array(
                 'http' => array(
