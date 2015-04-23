@@ -11,7 +11,7 @@
  *
  * @copyright  Copyright (c) 2015 Sphere Research Labs (http://sphere-research.com)
  * @license    link do licencji
- * @version    0.1
+ * @version    0.5
  */
 
 
@@ -29,175 +29,220 @@ class SphereEngineAPI
     private $access_token;
     // default language
     private $default_language_id;
+    // timeout settings
+    private $use_timeouts;
     // url of web service
     private $baseurl;
 
+    // timeouts for methods
+    private $timeout = array(
+            'test' => 5,
+            'languages' => 5,
+            'getSubmission' => 5,
+            'sendSubmission' => 10,
+            'getProblem' => 5
+        );
+
     public function __construct($params=array())
     {
-        if (isset($params['type'])) {
-            if ($params['type'] == 'SC')
-                $this->initSphereCompilers($params);
-            else if ($params['type'] == 'SP')
-                $this->initSphereProblems($params);
-        }
-    }
-
-    private function initSphereCompilers($params)
-    {
-        $this->init($params);
-        $this->baseurl = 'http://api.compilers.sphere-engine.com/api/' . $this->version . '/';
-
-        $this->access_token = (isset($params['access_token'])) ? $params['access_token'] : '';
-    }
-
-    public function initSphereProblems($params)
-    {
-        $this->init($params);
-        $this->baseurl = 'http://problems.sphere-engine.com/api/v' . $this->version . '/';
-
-        if (isset($params['username']) && isset($params['password']))
-            $data = $this->auth($params['username'], $params['password']);
-    }
-
-    private function init($params)
-    {
-        $this->type = $params['type'];
+        $this->type = (isset($params['type'])) ? $params['type'] : 'SC';
         $this->version = (isset($params['version'])) ? $params['version'] : '3';
+        $this->access_token = (isset($params['access_token'])) ? $params['access_token'] : '';
         $this->default_language_id = 11; // hardcoded C language
+        $this->use_timeouts = (isset($params['timeouts'])) ? intval($params['timeouts']) : 1;
+
+        if ($params['type'] == 'SC')
+            $this->baseurl = 'http://api.compilers.sphere-engine.com/api/' . $this->version . '/';
+        else if ($params['type'] == 'SP')
+            $this->baseurl = 'http://problems.sphere-engine.com/api/v' . $this->version . '/';
     }
 
+/**
+ * API settings
+ *
+ */
+
+    /**
+     * Set default language
+     *
+     * @param  integer      $language       id of the language
+     */ 
     public function setDefaultLanguage($language)
     {
         $this->default_language_id = $language;
     }
 
-    public function getDefaultLanguage()
+    /**
+     * Enable or disable timeouts for connections
+     *
+     * @param  bool      $t       true to enable timeouts, false to disable timeouts
+     */ 
+    public function setTimeouts($t)
     {
-        return $this->default_language_id;
+        $this->use_timeouts = intval($t);
     }
 
+    private function getTimeout($method)
+    {
+        if ($this->use_timeouts)
+            return $this->timeout[$method];
+        else
+            return intval(ini_get('max_execution_time'));
+    }
+
+/**
+ * API functions
+ *
+ */
+
+    /**
+     * @return test message or error
+     */ 
     public function test()
     {
+        $data['method'] = 'test';
         $url = $this->baseurl . 'test?access_token=' . $this->access_token;
-        return $this->get_content($url);
+        return $this->get_content($url, 'GET', $data);
     }
 
-    public function auth($username, $password)
-    {
-        if ($this->type == 'SP') {
-            $url = $this->baseurl . 'auth';
-            $data = array(
-                'username' => $username,
-                'password' => $password,
-                );
-            $response = $this->get_content($url, 'POST', $data);
-            $this->access_token = $response['access_token'];
-            return $response;
-        } else
-            return 'Error: action available only for Sphere Problem service';
-    }
-
+    /**
+     * Get available languages
+     * @return list of languages or error
+     */ 
     public function languages()
     {
+        $data['method'] = 'languages';
         $url = $this->baseurl . 'languages?access_token=' . $this->access_token;
-        return $this->get_content($url);
+        return $this->get_content($url, 'GET', $data);
     }
 
-    public function getSubmission($id, $withSource=0, $withInput=0, $withOutput=0, $withStderr=0, $withCmpinfo=0)
+    /**
+     * Get submission by ID
+     *
+     * @param  integer  $id         id of the submission
+     * @param  array    $params     SphereCompilers: 
+     *                                  'withSource' => bool,
+     *                                  'withInput' => bool,
+     *                                  'withOutput' => bool,
+     *                                  'withStderr' => bool,
+     *                                  'withCmpinfo' => bool
+     *                              SphereProblems: 
+     *                                  not applicable
+     * @return submission info or error
+     */ 
+    public function getSubmission($id, $params=array())
     {
         if ($this->type == 'SC') {
             $data = array(
-                'withSource' => $withSource,
-                'withInput' => $withInput,
-                'withOutput' => $withOutput,
-                'withStderr' => $withStderr,
-                'withCmpinfo' => $withCmpinfo,
-                'access_token' => $this->access_token
+                'withSource' => intval(isset($params['withSource']) ? $params['withSource'] : 0),
+                'withInput' => intval(isset($params['withInput']) ? $params['withInput'] : 0),
+                'withOutput' => intval(isset($params['withOutput']) ? $params['withOutput'] : 0),
+                'withStderr' => intval(isset($params['withStderr']) ? $params['withStderr'] : 0),
+                'withCmpinfo' => intval(isset($params['withCmpinfo']) ? $params['withCmpinfo'] : 0),
+                );
+        }
+        $data['access_token'] = $this->access_token;
+        $data['method'] = 'getSubmission';
+        $url = $this->baseurl . 'submissions/' . $id . '?' . http_build_query($data, '', '&');
+        return $this->get_content($url, 'GET', $data);   
+    }
+    
+
+    /**
+     * Send submission
+     *
+     * @param  array    $params     SphereCompilers: 
+     *                                  'source' => string,
+     *                                  'language' => integer,
+     *                                  'input' => string,
+     *                              SphereProblems: 
+     *                                  'problemCode' => string,
+     *                                  'language' => integer,
+     *                                  'source' => string,
+     *                                  'contestCode' => string,
+     *                                  'userId' => integer,
+     *                                  'private' => bool,
+     * @return submission id or error
+     */ 
+    public function sendSubmission($params=array())
+    {
+        if ($this->type == 'SC') {
+            $data = array(
+                'sourceCode' => (isset($params['source']) ? $params['source'] : ''),
+                'language' => (isset($params['language']) ? $params['language'] : $this->default_language_id),
+                'input' => (isset($params['input']) ? $params['input'] : '')
                 );
         } else if ($this->type == 'SP') {
             $data = array(
-                'access_token' => $this->access_token
+                    'problemCode' => (isset($params['problemCode']) ? $params['problemCode'] : 'TEST'),
+                    'languageId' => intval(isset($params['language']) ? $params['language'] : $this->default_language_id),
+                    'source' => (isset($params['source']) ? $params['source'] : 'TEST'),
+                    'contestCode' => (isset($params['contestCode']) ? $params['contestCode'] : ''),
+                    'userId' => intval(isset($params['userId']) ? $params['userId'] : 0),
+                    'private' => intval(isset($params['private']) ? $params['private'] : 0)
                 );
         }
-        $url = $this->baseurl . 'submissions/' . $id . '?' . http_build_query($data, '', '&');
-        return $this->get_content($url);   
-    }
-    
-/*
-access_token        query   string
-problemCode     form    string
-languageId      form    integer
-source      form    string
-contestCode     form    string
-userId      form    integer
-private bool
-*/
-    public function sendSubmission($sourceCode='', $language=NULL, $input='')
-    {
-        if ($language == NULL) $language = $this->default_language_id;
-
+        $data['method'] = 'sendSubmission';
         $url = $this->baseurl . 'submissions?access_token=' . $this->access_token;
-        $data = array(
-            'sourceCode' => $sourceCode,
-            'language' => intval($language),
-            'input' => $input,
-            );
         return $this->get_content($url, 'POST', $data);
     }
 
+    /**
+     * Get problem info (SphereProblems only)
+     *
+     * @param  string    $problemCode    Code of the problem
+     * @return problem info or error
+     */ 
     public function getProblem($problemCode)
     {
+        $data['method'] = 'getProblem';
         if ($this->type == 'SP') {
             $url = $this->baseurl . 'problems/' . $problemCode . '?access_token=' . $this->access_token;
-            return $this->get_content($url, 'GET');
+            return $this->get_content($url, 'GET', $data);
         } else
             return 'Error: action available only for Sphere Problem service';
     }
 
-
+/**
+ * API connection
+ *
+ */
 
     private function get_content($url, $type='GET', $data=array())
     {
-        return json_decode($this->get_content_curlless($url, $type, $data), true);
-    }
-
-    private function get_content_curlless($url, $type='GET', $data=array())
-    {
+        // get proper timeout by calling method
+        $method = (isset($data['method'])) ? $data['method'] : 'test';
+        echo $this->getTimeout($method);
         if ($type == 'GET') {
             $options = array(
                 'http' => array(
-                'method' => "GET",
+                'method' => 'GET',
+                'timeout' => $this->getTimeout($method),
                 'ignore_errors' => true
                 )
             );
             $context  = stream_context_create($options);
-            return file_get_contents($url, false, $context);
+            if (($content = @file_get_contents($url, false, $context)) === FALSE) {
+                return 'timeout';
+            } else
+                return json_decode($content, true);
         } else if ($type == 'POST') {
             $options = array(
                 'http' => array( // even if https
                     'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
                     'method'  => 'POST',
+                    'timeout' => $this->getTimeout($method),
                     'ignore_errors' => true,
                     'content' => http_build_query($data),
                 ),
             );
             $context  = stream_context_create($options);
-            return file_get_contents($url, false, $context);
+            if (($content = @file_get_contents($url, false, $context)) === FALSE) {
+                return 'timeout';
+            } else
+                return json_decode($content, true);
         } else {
             return 'ERROR';
         }
     }
-
-    /*
-    private function get_content_curl($url)
-    {
-        $ch = curl_init(); 
-        curl_setopt($ch, CURLOPT_URL, $url); 
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); 
-        $response = curl_exec($ch); 
-        curl_close($ch); 
-
-        return $response;
-    }
-    */
 }
