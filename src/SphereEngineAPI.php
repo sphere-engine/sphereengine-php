@@ -182,17 +182,17 @@ class SphereEngineAPI
         if ($this->type == 'SC') {
             $data = array(
                 'sourceCode' => (isset($params['source']) ? $params['source'] : ''),
-                'language' => (isset($params['language']) ? $params['language'] : $this->default_language_id),
+                'language' => intval((isset($params['language']) ? $params['language'] : $this->default_language_id)),
                 'input' => (isset($params['input']) ? $params['input'] : '')
                 );
         } else if ($this->type == 'SP') {
             $data = array(
-                    'problemCode' => (isset($params['problemCode']) ? $params['problemCode'] : 'TEST'),
-                    'languageId' => intval(isset($params['language']) ? $params['language'] : $this->default_language_id),
-                    'source' => (isset($params['source']) ? $params['source'] : 'TEST'),
-                    'contestCode' => (isset($params['contestCode']) ? $params['contestCode'] : ''),
-                    'userId' => intval(isset($params['userId']) ? $params['userId'] : 0),
-                    'private' => intval(isset($params['private']) ? $params['private'] : 0)
+                'problemCode' => (isset($params['problemCode']) ? $params['problemCode'] : 'TEST'),
+                'languageId' => intval(isset($params['language']) ? $params['language'] : $this->default_language_id),
+                'source' => (isset($params['source']) ? $params['source'] : ''),
+                'contestCode' => (isset($params['contestCode']) ? $params['contestCode'] : ''),
+                'userId' => intval(isset($params['userId']) ? $params['userId'] : 0),
+                'private' => intval(isset($params['private']) ? $params['private'] : 0)
                 );
         }
         $data['method'] = 'sendSubmission';
