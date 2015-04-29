@@ -53,39 +53,29 @@ class SphereEngineAPI
     }
 }
 
-
 /**
- * SphereEngineCompilersAPI
+ * SphereEngineDefaultAPI
  *
  */
-class SphereEngineCompilersAPI 
+class SphereEngineDefaultAPI 
 {
     // version of API
-    private $version = 3;
+    protected $version = 3;
     // access token
-    private $access_token;
+    protected $access_token;
     // default language
     public $default_language_id = 11;
     // timeout settings
     public $use_timeouts = 1;
     // url of web service
-    private $baseurl;
-
+    protected $baseurl;
     // timeouts for methods
-    private $timeout = array(
-            'test' => 5,
-            'languages' => 5,
-            'getSubmission' => 5,
-            'sendSubmission' => 10,
-        );
+    protected $timeout = array('test' => 5);
 
-    public function __construct($access_token, $url=NULL)
+    public function __construct($access_token, $url)
     {
         $this->access_token = $access_token;
-        if (isset($url))
-            $this->baseurl = $url;
-        else
-            $this->baseurl = 'http://api.compilers.sphere-engine.com/api/' . $this->version . '/';
+        $this->baseurl = $url;
     }
 
     /**
@@ -108,7 +98,7 @@ class SphereEngineCompilersAPI
         $this->use_timeouts = intval($t);
     }
 
-    private function getTimeout($method)
+    protected function getTimeout($method)
     {
         if ($this->use_timeouts)
             return $this->timeout[$method];
@@ -124,7 +114,49 @@ class SphereEngineCompilersAPI
     public function test()
     {
         $url = $this->baseurl . 'test?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('test'));
+        return $this->get_content($url, 'GET', $this->getTimeout('test'));
+    }
+
+    /**
+     *
+     * REST requests
+     *
+     */
+    protected function get_content($url, $type='GET', $timeout=10, $data=array())
+    {
+        $options = array(
+                'http' => array(
+                    'header'  => "Content-type: application/x-www-form-urlencoded; charset=utf-8\r\n",
+                    'method' => $type,
+                    'timeout' => $timeout,
+                    'ignore_errors' => true,
+                    'content' => http_build_query($data),
+                )
+            );
+        $context  = stream_context_create($options);
+        if (($content = @file_get_contents($url, false, $context)) === FALSE)
+            return 'ERROR: timeout or other exception';
+        else
+            return json_decode($content, true);
+    }
+}
+
+
+/**
+ * SphereEngineCompilersAPI
+ *
+ */
+class SphereEngineCompilersAPI extends SphereEngineDefaultAPI
+{
+    public function __construct($access_token, $url=NULL)
+    {
+        parent::__construct($access_token, (isset($url)) ? $url : 'http://api.compilers.sphere-engine.com/api/' . $this->version . '/');
+        $this->timeout = array(
+            'test' => 5,
+            'languages' => 5,
+            'getSubmission' => 5,
+            'sendSubmission' => 10,
+        );
     }
 
     /**
@@ -135,7 +167,7 @@ class SphereEngineCompilersAPI
     public function languages()
     {
         $url = $this->baseurl . 'languages?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('languages'));
+        return $this->get_content($url, 'GET', $this->getTimeout('languages'));
     }
 
     /**
@@ -161,7 +193,7 @@ class SphereEngineCompilersAPI
             );
         $data['access_token'] = $this->access_token;
         $url = $this->baseurl . 'submissions/' . $id . '?' . http_build_query($data, '', '&');
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('getSubmission')); 
+        return $this->get_content($url, 'GET', $this->getTimeout('getSubmission')); 
     }
 
 
@@ -183,7 +215,7 @@ class SphereEngineCompilersAPI
             );
      
         $url = $this->baseurl . 'submissions?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'POST', $this->getTimeout('sendSubmission'), $data);
+        return $this->get_content($url, 'POST', $this->getTimeout('sendSubmission'), $data);
     }
 }
 
@@ -192,21 +224,12 @@ class SphereEngineCompilersAPI
  * SphereEngineProblemsAPI
  *
  */
-class SphereEngineProblemsAPI 
+class SphereEngineProblemsAPI extends SphereEngineDefaultAPI
 {
-    // version of API
-    private $version = 3;
-    // access token
-    private $access_token;
-    // default language
-    public $default_language_id = 11; //hardcoded C
-    // timeout settings
-    public $use_timeouts = 1;
-    // url of web service
-    private $baseurl;
-
-    // timeouts for methods
-    private $timeout = array(
+    public function __construct($access_token, $url=NULL)
+    {
+        parent::__construct($access_token, (isset($url)) ? $url : 'http://problems.sphere-engine.com/api/v' . $this->version . '/');
+        $this->timeout = array(
             'test' => 5,
             'languages' => 5,
             'getSubmission' => 5,
@@ -214,53 +237,6 @@ class SphereEngineProblemsAPI
             'problemsList' => 5,
             'getProblem' => 5,
         );
-
-    public function __construct($access_token, $url=NULL)
-    {
-        $this->access_token = $access_token;
-        if (isset($url))
-            $this->baseurl = $url;
-        else
-            $this->baseurl = 'http://problems.sphere-engine.com/api/v' . $this->version . '/';
-    }
-
-    /**
-     * Set default language
-     *
-     * @param  integer      $language       id of the language
-     */ 
-    public function setDefaultLanguage($language)
-    {
-        $this->default_language_id = $language;
-    }
-
-    /**
-     * Enable or disable timeouts for connections
-     *
-     * @param  bool      $t       true to enable timeouts, false to disable timeouts
-     */ 
-    public function setTimeouts($t)
-    {
-        $this->use_timeouts = intval($t);
-    }
-
-    private function getTimeout($method)
-    {
-        if ($this->use_timeouts)
-            return $this->timeout[$method];
-        else
-            return intval(ini_get('max_execution_time'));
-    }
-
-    /**
-     * Test API
-     *
-     * @return test message or error
-     */ 
-    public function test()
-    {
-        $url = $this->baseurl . 'test?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('test'));
     }
 
     /**
@@ -271,7 +247,7 @@ class SphereEngineProblemsAPI
     public function languages()
     {
         $url = $this->baseurl . 'languages?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('languages'));
+        return $this->get_content($url, 'GET', $this->getTimeout('languages'));
     }
 
     /**
@@ -284,7 +260,7 @@ class SphereEngineProblemsAPI
     public function getSubmission($id)
     {
         $url = $this->baseurl . 'submissions/' . $id . '?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('getSubmission'));   
+        return $this->get_content($url, 'GET', $this->getTimeout('getSubmission'));   
     }
 
 
@@ -311,7 +287,7 @@ class SphereEngineProblemsAPI
             'private' => intval($private)
             );
         $url = $this->baseurl . 'submissions?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'POST', $this->getTimeout('sendSubmission'), $data);
+        return $this->get_content($url, 'POST', $this->getTimeout('sendSubmission'), $data);
     }
 
     /**
@@ -322,7 +298,7 @@ class SphereEngineProblemsAPI
     public function problemsList()
     {
         $url = $this->baseurl . 'problems?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('problemsList'));
+        return $this->get_content($url, 'GET', $this->getTimeout('problemsList'));
 
     }
 
@@ -335,31 +311,6 @@ class SphereEngineProblemsAPI
     public function getProblem($problemCode)
     {
         $url = $this->baseurl . 'problems/' . $problemCode . '?access_token=' . $this->access_token;
-        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('getProblem'));
-    }
-}
-
-/**
- * SphereEngineREST
- *
- */
-class SphereEngineREST
-{
-    public static function get_content($url, $type='GET', $timeout=10, $data=array())
-    {
-        $options = array(
-                'http' => array(
-                    'header'  => "Content-type: application/x-www-form-urlencoded; charset=utf-8\r\n",
-                    'method' => $type,
-                    'timeout' => $timeout,
-                    'ignore_errors' => true,
-                    'content' => http_build_query($data),
-                )
-            );
-        $context  = stream_context_create($options);
-        if (($content = @file_get_contents($url, false, $context)) === FALSE)
-            return 'ERROR: timeout or other exception';
-        else
-            return json_decode($content, true);
+        return $this->get_content($url, 'GET', $this->getTimeout('getProblem'));
     }
 }
