@@ -11,26 +11,63 @@
  *
  * @copyright  Copyright (c) 2015 Sphere Research Labs (http://sphere-research.com)
  * @license    link do licencji
- * @version    0.5
+ * @version    0.6
  */
 
 
 /**
- * Opis klasy
+ * SphereEngineAPI
  *
  */
 class SphereEngineAPI 
 {
-    // type of API (SC for Sphere Compilers or SP for Sphere Problems)
-    private $type;
+    public $compilers;
+    public $problems;
+
+    public function __construct($access_token, $url_compilers=NULL, $url_problems=NULL)
+    {
+        $this->compilers = new SphereEngineCompilersAPI($access_token, $url_compilers);
+        $this->problems = new SphereEngineProblemsAPI($access_token, $url_problems);
+    }
+
+    /**
+     * Set default language
+     *
+     * @param  integer      $language       id of the language
+     */ 
+    public function setDefaultLanguage($language)
+    {
+        $this->compilers->setDefaultLanguage($language);
+        $this->problems->setDefaultLanguage($language);
+    }
+
+    /**
+     * Enable or disable timeouts for connections
+     *
+     * @param  bool      $t       true to enable timeouts, false to disable timeouts
+     */ 
+    public function setTimeouts($t)
+    {
+        $this->compilers->setTimeouts($t);
+        $this->problems->setTimeouts($t);
+    }
+}
+
+
+/**
+ * SphereEngineCompilersAPI
+ *
+ */
+class SphereEngineCompilersAPI 
+{
     // version of API
-    private $version;
+    private $version = 3;
     // access token
     private $access_token;
     // default language
-    private $default_language_id;
+    public $default_language_id = 11;
     // timeout settings
-    private $use_timeouts;
+    public $use_timeouts = 1;
     // url of web service
     private $baseurl;
 
@@ -38,32 +75,18 @@ class SphereEngineAPI
     private $timeout = array(
             'test' => 5,
             'languages' => 5,
-            // submissions
             'getSubmission' => 5,
             'sendSubmission' => 10,
-            // problems
-            'problems' => 5,
-            'getProblem' => 5,
         );
 
-    public function __construct($params=array())
+    public function __construct($access_token, $url=NULL)
     {
-        $this->type = (isset($params['type'])) ? $params['type'] : 'SC';
-        $this->version = (isset($params['version'])) ? $params['version'] : '3';
-        $this->access_token = (isset($params['access_token'])) ? $params['access_token'] : '';
-        $this->default_language_id = 11; // hardcoded C language
-        $this->use_timeouts = (isset($params['timeouts'])) ? intval($params['timeouts']) : 1;
-
-        if ($params['type'] == 'SC')
+        $this->access_token = $access_token;
+        if (isset($url))
+            $this->baseurl = $url;
+        else
             $this->baseurl = 'http://api.compilers.sphere-engine.com/api/' . $this->version . '/';
-        else if ($params['type'] == 'SP')
-            $this->baseurl = 'http://problems.sphere-engine.com/api/v' . $this->version . '/';
     }
-
-/**
- * API settings
- *
- */
 
     /**
      * Set default language
@@ -93,11 +116,6 @@ class SphereEngineAPI
             return intval(ini_get('max_execution_time'));
     }
 
-/**
- * API functions
- *
- */
-
     /**
      * Test API
      *
@@ -105,9 +123,8 @@ class SphereEngineAPI
      */ 
     public function test()
     {
-        $data['method'] = 'test';
         $url = $this->baseurl . 'test?access_token=' . $this->access_token;
-        return $this->get_content($url, 'GET', $data);
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('test'));
     }
 
     /**
@@ -117,143 +134,224 @@ class SphereEngineAPI
      */ 
     public function languages()
     {
-        $data['method'] = 'languages';
         $url = $this->baseurl . 'languages?access_token=' . $this->access_token;
-        return $this->get_content($url, 'GET', $data);
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('languages'));
+    }
+
+    /**
+     * Get submission by ID
+     *
+     * @param  integer   $id                    id of the submission
+     * @param  bool      $withSource            include source in response
+     * @param  bool      $withInput             include input in response
+     * @param  bool      $withOutput            include output in response
+     * @param  bool      $withStderr            include stderr info in response
+     * @param  bool      $withCmpinfo           include cmpinfo in response
+     *
+     * @return submission info or error
+     */ 
+    public function getSubmission($id, $withSource=0, $withInput=0, $withOutput=0, $withStderr=0, $withCmpinfo=0)
+    {
+        $data = array(
+            'withSource' => intval($withSource),
+            'withInput' => intval($withInput),
+            'withOutput' => intval($withOutput),
+            'withStderr' => intval($withStderr),
+            'withCmpinfo' => intval($withCmpinfo),
+            );
+        $data['access_token'] = $this->access_token;
+        $url = $this->baseurl . 'submissions/' . $id . '?' . http_build_query($data, '', '&');
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('getSubmission')); 
     }
 
 
     /**
-     * 
-     * SUBMISSIONS
+     * Send submission
      *
+     * @param  string    $source        source code
+     * @param  integer   $language      language ID
+     * @param  string    $input         input for the program
+     *
+     * @return submission id or error
      */ 
+    public function sendSubmission($source, $language=NULL, $input='')
+    {
+        $data = array(
+            'sourceCode' => $source,
+            'language' => intval((isset($language) ? $language : $this->default_language_id)),
+            'input' => $input,
+            );
+     
+        $url = $this->baseurl . 'submissions?access_token=' . $this->access_token;
+        return SphereEngineREST::get_content($url, 'POST', $this->getTimeout('sendSubmission'), $data);
+    }
+}
+
+
+/**
+ * SphereEngineProblemsAPI
+ *
+ */
+class SphereEngineProblemsAPI 
+{
+    // version of API
+    private $version = 3;
+    // access token
+    private $access_token;
+    // default language
+    public $default_language_id = 11; //hardcoded C
+    // timeout settings
+    public $use_timeouts = 1;
+    // url of web service
+    private $baseurl;
+
+    // timeouts for methods
+    private $timeout = array(
+            'test' => 5,
+            'languages' => 5,
+            'getSubmission' => 5,
+            'sendSubmission' => 10,
+            'problemsList' => 5,
+            'getProblem' => 5,
+        );
+
+    public function __construct($access_token, $url=NULL)
+    {
+        $this->access_token = $access_token;
+        if (isset($url))
+            $this->baseurl = $url;
+        else
+            $this->baseurl = 'http://problems.sphere-engine.com/api/v' . $this->version . '/';
+    }
+
+    /**
+     * Set default language
+     *
+     * @param  integer      $language       id of the language
+     */ 
+    public function setDefaultLanguage($language)
+    {
+        $this->default_language_id = $language;
+    }
+
+    /**
+     * Enable or disable timeouts for connections
+     *
+     * @param  bool      $t       true to enable timeouts, false to disable timeouts
+     */ 
+    public function setTimeouts($t)
+    {
+        $this->use_timeouts = intval($t);
+    }
+
+    private function getTimeout($method)
+    {
+        if ($this->use_timeouts)
+            return $this->timeout[$method];
+        else
+            return intval(ini_get('max_execution_time'));
+    }
+
+    /**
+     * Test API
+     *
+     * @return test message or error
+     */ 
+    public function test()
+    {
+        $url = $this->baseurl . 'test?access_token=' . $this->access_token;
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('test'));
+    }
+
+    /**
+     * Get available languages
+     *
+     * @return list of languages or error
+     */ 
+    public function languages()
+    {
+        $url = $this->baseurl . 'languages?access_token=' . $this->access_token;
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('languages'));
+    }
 
     /**
      * Get submission by ID
      *
      * @param  integer  $id         id of the submission
-     * @param  array    $params     SphereCompilers: 
-     *                                  'withSource' => bool,
-     *                                  'withInput' => bool,
-     *                                  'withOutput' => bool,
-     *                                  'withStderr' => bool,
-     *                                  'withCmpinfo' => bool
-     *                              SphereProblems: 
-     *                                  not applicable
+     *
      * @return submission info or error
      */ 
-    public function getSubmission($id, $params=array())
+    public function getSubmission($id)
     {
-        if ($this->type == 'SC') {
-            $data = array(
-                'withSource' => intval(isset($params['withSource']) ? $params['withSource'] : 0),
-                'withInput' => intval(isset($params['withInput']) ? $params['withInput'] : 0),
-                'withOutput' => intval(isset($params['withOutput']) ? $params['withOutput'] : 0),
-                'withStderr' => intval(isset($params['withStderr']) ? $params['withStderr'] : 0),
-                'withCmpinfo' => intval(isset($params['withCmpinfo']) ? $params['withCmpinfo'] : 0),
-                );
-        }
-        $data['access_token'] = $this->access_token;
-        $data['method'] = 'getSubmission';
-        $url = $this->baseurl . 'submissions/' . $id . '?' . http_build_query($data, '', '&');
-        return $this->get_content($url, 'GET', $data);   
+        $url = $this->baseurl . 'submissions/' . $id . '?access_token=' . $this->access_token;
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('getSubmission'));   
     }
-    
+
 
     /**
      * Send submission
      *
-     * @param  array    $params     SphereCompilers: 
-     *                                  'source' => string,
-     *                                  'language' => integer,
-     *                                  'input' => string,
-     *                              SphereProblems: 
-     *                                  'problemCode' => string, (required)
-     *                                  'language' => integer, (required)
-     *                                  'source' => string, (required)
-     *                                  'contestCode' => string,
-     *                                  'userId' => integer,
-     *                                  'private' => bool,
+     * @param  string       $problemCode       code of the problem
+     * @param  string       $source            source code
+     * @param  integer      $language          language id
+     * @param  string       $contestCode       code of the contest
+     * @param  integer      $userId            user ID
+     * @param  bool         $private           flag for private submissions
+     *
      * @return submission id or error
      */ 
-    public function sendSubmission($params=array())
+    public function sendSubmission($problemCode, $source, $language=NULL, $contestCode='', $userId=0, $private=0)
     {
-        if ($this->type == 'SC') {
-            $data = array(
-                'sourceCode' => (isset($params['source']) ? $params['source'] : ''),
-                'language' => intval((isset($params['language']) ? $params['language'] : $this->default_language_id)),
-                'input' => (isset($params['input']) ? $params['input'] : '')
-                );
-        } else if ($this->type == 'SP') {
-            $data = array(
-                'problemCode' => (isset($params['problemCode']) ? $params['problemCode'] : 'TEST'),
-                'languageId' => intval(isset($params['language']) ? $params['language'] : $this->default_language_id),
-                'source' => (isset($params['source']) ? $params['source'] : ''),
-                'contestCode' => (isset($params['contestCode']) ? $params['contestCode'] : ''),
-                'userId' => intval(isset($params['userId']) ? $params['userId'] : 0),
-                'private' => intval(isset($params['private']) ? $params['private'] : 0)
-                );
-        }
-        $data['method'] = 'sendSubmission';
+        $data = array(
+            'problemCode' => $problemCode,
+            'source' => $source,
+            'languageId' => intval((isset($language) ? $language : $this->default_language_id)),
+            'contestCode' => $contestCode,
+            'userId' => intval($userId),
+            'private' => intval($private)
+            );
         $url = $this->baseurl . 'submissions?access_token=' . $this->access_token;
-        return $this->get_content($url, 'POST', $data);
+        return SphereEngineREST::get_content($url, 'POST', $this->getTimeout('sendSubmission'), $data);
     }
 
     /**
-     * 
-     * PROBLEMS
-     *
-     */ 
-
-    /**
-     * Get problems (SphereProblems only)                       CHYBA TU JEST PAGINACJA??
+     * Get problems                       CHYBA TU JEST PAGINACJA??
      *
      * @return problem list or error
      */ 
-    public function problems()
+    public function problemsList()
     {
-        $data['method'] = 'problems';
-        if ($this->type == 'SP') {
-            $url = $this->baseurl . 'problems?access_token=' . $this->access_token;
-            return $this->get_content($url, 'GET', $data);
-        } else
-            return 'Error: action available only for Sphere Problem service';
+        $url = $this->baseurl . 'problems?access_token=' . $this->access_token;
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('problemsList'));
+
     }
 
     /**
-     * Get problem info (SphereProblems only)
+     * Get problem info
      *
      * @param  string    $problemCode    Code of the problem
      * @return problem info or error
      */ 
     public function getProblem($problemCode)
     {
-        $data['method'] = 'getProblem';
-        if ($this->type == 'SP') {
-            $url = $this->baseurl . 'problems/' . $problemCode . '?access_token=' . $this->access_token;
-            return $this->get_content($url, 'GET', $data);
-        } else
-            return 'Error: action available only for Sphere Problem service';
+        $url = $this->baseurl . 'problems/' . $problemCode . '?access_token=' . $this->access_token;
+        return SphereEngineREST::get_content($url, 'GET', $this->getTimeout('getProblem'));
     }
-
+}
 
 /**
- * API connection
+ * SphereEngineREST
  *
  */
-
-    private function get_content($url, $type='GET', $data=array())
+class SphereEngineREST
+{
+    public static function get_content($url, $type='GET', $timeout=10, $data=array())
     {
-        // get proper timeout by calling method
-        $method = (isset($data['method'])) ? $data['method'] : 'test';
-        unset($data['method']);
-
         $options = array(
                 'http' => array(
                     'header'  => "Content-type: application/x-www-form-urlencoded; charset=utf-8\r\n",
                     'method' => $type,
-                    'timeout' => $this->getTimeout($method),
+                    'timeout' => $timeout,
                     'ignore_errors' => true,
                     'content' => http_build_query($data),
                 )
